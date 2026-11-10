@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_protect
 from rest_framework.generics import (
-    ListAPIView,
+    ListCreateAPIView,  
     RetrieveUpdateDestroyAPIView
 )
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
@@ -19,7 +19,6 @@ def home_page(request):
 @csrf_protect
 @require_POST
 def user_login(request):
-    
     username = request.POST.get('username')
     password = request.POST.get('password')
     
@@ -30,10 +29,11 @@ def user_login(request):
     )
     if user is None:
         return JsonResponse(
-            {"error": "Неверный логин или пороль"},
+            {"error": "Неверный логин или пароль"}, 
             status=400
         )
-    logout(request, user)
+    
+    login(request, user)
     
     return JsonResponse({
         "message": "Вы успешно вошли",
@@ -43,19 +43,22 @@ def user_login(request):
 @csrf_protect
 @require_POST
 def user_logout(request):
+    
     logout(request)
     
     return JsonResponse({
-        "message": "Вы вышли с акаунта"
+        "message": "Вы вышли с аккаунта"
     })
 
-class ArticleListView(ListAPIView):
+
+class ArticleListView(ListCreateAPIView): 
     queryset = Article.objects.all()
     serializer_class = ArticleSerializer
     
     permission_classes = [IsAuthenticatedOrReadOnly]
     
-    def perfom_crete(self, serializer):
+    
+    def perform_create(self, serializer):
         serializer.save(author=self.request.user)
         
 class ArticleDetail(RetrieveUpdateDestroyAPIView):
