@@ -1,0 +1,265 @@
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Django Permissions Demo</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f3f4f6;
+        padding: 30px;
+        max-width: 850px;
+        margin: auto;
+    }
+
+    .card {
+        background: white;
+        padding: 20px;
+        margin-bottom: 15px;
+        border-radius: 10px;
+    }
+
+    input, textarea, button {
+        padding: 10px;
+        margin: 5px 0;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    button {
+        cursor: pointer;
+        border: none;
+        border-radius: 5px;
+        background: #2563eb;
+        color: white;
+    }
+
+    .delete {
+        background: #dc2626;
+    }
+
+    .edit {
+        background: #16a34a;
+    }
+
+    .message {
+        padding: 10px;
+        background: #e5e7eb;
+        margin: 10px 0;
+        border-radius: 5px;
+    }
+</style>
+</head>
+<body>
+<h1>Django Permissions Demo</h1>
+
+<input type="hidden" id="csrf" value="{{ csrf_token }}">
+
+<div class="card">
+    <h2>Авторизация</h2>
+
+    <input id="username" placeholder="Логин">
+
+    <input id="password" type="password" placeholder="Пароль">
+
+    <button onclick="loginUser()">Войти</button>
+
+    <button onclick="logoutUser()">Выйти</button>
+
+    <p id="userInfo">Не авторизован</p>
+</div>
+
+<div class="card">
+    <h2>Создать статью</h2>
+
+    <input id="title" placeholder="Название статьи">
+
+    <textarea id="content" placeholder="Содержание статьи"></textarea>
+
+    <button onclick="createArticle()">Создать</button>
+</div>
+
+<div class="card">
+    <h2>Все статьи</h2>
+
+    <button onclick="loadArticles()">Обновить список</button>
+
+    <div id="articles"></div>
+</div>
+
+<div id="message" class="message">
+    Ожидание действий...
+</div>
+
+<script>
+    // Функция для получения актуального CSRF-токена из куки или инпута
+    function getCSRFToken() {
+        const cookieValue = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('csrftoken='))
+            ?.split('=')[1];
+        
+        if (cookieValue) {
+            document.getElementById('csrf').value = cookieValue;
+            return cookieValue;
+        }
+        return document.getElementById('csrf').value;
+    }
+
+    function showMessage(text) {
+        document.getElementById('message').innerText = text;
+    }
+
+    async function loginUser() {
+        const data = new FormData();
+        data.append('username', document.getElementById('username').value);
+        data.append('password', document.getElementById('password').value);
+
+        const response = await fetch('/api/login/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: data
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showMessage(result.message);
+            document.getElementById('userInfo').innerText = 'Вы вошли как: ' + result.username;
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+        } else {
+            showMessage(result.error || 'Ошибка авторизации');
+        }
+
+        loadArticles();
+    }
+
+    async function logoutUser() {
+        const response = await fetch('/api/logout/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+
+        const result = await response.json();
+        document.getElementById('userInfo').innerText = 'Не авторизован';
+        showMessage(result.message);
+        loadArticles();
+    }
+
+    async function loadArticles() {
+        const response = await fetch('/api/articles/');
+        if (!response.ok) {
+            showMessage('Ошибка загрузки статей: ' + response.status);
+            return;
+        }
+        
+        const articles = await response.json();
+        const container = document.getElementById('articles');
+        container.innerHTML = '';
+
+        articles.forEach(article => {
+            const div = document.createElement('div');
+            div.className = 'card';
+
+            const title = document.createElement('h3');
+            title.innerText = article.title;
+
+            const content = document.createElement('p');
+            content.innerText = article.content;
+
+            const author = document.createElement('p');
+            author.innerText = 'Автор: ' + (article.author || 'Аноним');
+
+            const edit = document.createElement('button');
+            edit.className = 'edit';
+            edit.innerText = 'Редактировать';
+            edit.onclick = () => editArticle(article.id);
+
+            const remove = document.createElement('button');
+            remove.className = 'delete';
+            remove.innerText = 'Удалить';
+            remove.onclick = () => deleteArticle(article.id);
+
+            div.append(title, content, author, edit, remove);
+            container.appendChild(div);
+        });
+    }
+
+    async function createArticle() {
+        const titleInput = document.getElementById('title');
+        const contentInput = document.getElementById('content');
+
+        const response = await fetch('/api/articles/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({
+                title: titleInput.value,
+                content: contentInput.value
+            })
+        });
+
+        if (response.ok) {
+            showMessage('Статья создана!');
+            titleInput.value = '';
+            contentInput.value = '';
+            loadArticles();
+        } else {
+            showMessage('Ошибка создания: ' + response.status);
+        }
+    }
+
+    async function editArticle(id) {
+        const newTitle = prompt('Новое название статьи:');
+        if (!newTitle) return;
+
+        const response = await fetch(`/api/articles/${id}/`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({
+                title: newTitle
+            })
+        });
+
+        if (response.ok) {
+            showMessage('Статья изменена!');
+        } else {
+            showMessage('Доступ запрещён! HTTP ' + response.status);
+        }
+
+        loadArticles();
+    }
+
+    async function deleteArticle(id) {
+        if (!confirm('Вы уверены, что хотите удалить эту статью?')) return;
+
+        const response = await fetch(`/api/articles/${id}/`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+
+        if (response.ok) {
+            showMessage('Статья удалена!');
+        } else {
+            showMessage('Доступ запрещён! HTTP ' + response.status);
+        }
+
+        loadArticles();
+    }
+
+    // Первоначальный запрос при загрузке страницы
+    loadArticles();
+</script>
+</body>
+</html>
